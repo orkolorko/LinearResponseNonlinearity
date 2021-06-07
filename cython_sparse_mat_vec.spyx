@@ -1,0 +1,13 @@
+import cython
+
+from sage.matrix.matrix_generic_sparse cimport *
+from sage.modules.free_module_element cimport *
+
+# this is a generic sparse_mat_vec, hoping to get some speedup from the fact that it is compiled
+def cython_sparse_matvec(Matrix_generic_sparse P, FreeModuleElement_generic_dense v, FreeModuleElement_generic_dense w):
+	for (ij, val) in P.dict().iteritems():
+		w[ij[0]] += val*v[ij[1]]
+
+def cython_sparse_vecmat(Matrix_generic_sparse P, FreeModuleElement_generic_dense v, FreeModuleElement_generic_dense w):
+	for (ij, val) in P.dict().iteritems():
+		w[ij[1]] += val*v[ij[0]]

@@ -1,0 +1,48 @@
+cimport cython
+from sage.rings.real_mpfr cimport RealNumber
+from sage.rings.real_mpfr import RR
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+
+
+def polyval_real(list polynomial,RealNumber x):
+	"""
+	Evaluates a polynomial p (given by its coefficients, e.g., [0, 1, 2] represents :math:`x+2x^2`) in an interval point x.
+	Args:
+		p (collection):
+		x (number):
+	Returns:
+		:math:`p(x)`, evaluated using the operations of x.
+	"""
+	
+	cdef RealNumber result=RR(0)
+	cdef RealNumber coefficient
+	
+	for coefficient in reversed(polynomial):
+		result = x*result + coefficient
+	
+	return result
+
+from sage.rings.real_mpfi cimport RealIntervalFieldElement
+from sage.rings.real_mpfi import RealInterval
+
+def polyval_interval(list polynomial,RealIntervalFieldElement x):
+	"""
+	Evaluates a polynomial p (given by its coefficients, e.g., [0, 1, 2] represents :math:`x+2x^2`) in an interval point x.
+	Args:
+		p (collection):
+		x (number):
+	Returns:
+		:math:`p(x)`, evaluated using the operations of x.
+	"""
+	
+	cdef int prec=x.prec()
+	cdef RealIntervalFieldElement result=RealInterval(0,min_prec=prec)
+	cdef RealIntervalFieldElement coefficient
+	
+	for coefficient in reversed(polynomial):
+		result = x*result + coefficient
+	
+	return result

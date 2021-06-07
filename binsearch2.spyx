@@ -1,0 +1,33 @@
+import numpy as np
+cimport numpy as np
+cimport cython
+
+@cython.boundscheck(False)
+def binsearch2(double x, np.ndarray[np.float_t, ndim=1] partition):
+	"""
+	Return i such that `partition[i] <= x < partition[i+1]`.
+	
+	if x < partition[0], returns -1
+	if x >= partition[-1], returns len(partition)
+	
+	Assumes that the sequence `partition` is sorted
+	"""
+	
+	cdef int a, b, m
+	
+	if x < partition[0]:
+		return -1
+	if x >= partition[-1]:
+		return len(partition)
+		
+	a = 0;
+	b = len(partition) - 1 #invariant: partition[a] <= x < partition[b] and a<b
+	
+	while b-a > 1:
+		m = (b+a)//2
+		if partition[m] > x:
+			b = m
+		else:
+			a = m
+	return a
+

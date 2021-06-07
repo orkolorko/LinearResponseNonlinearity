@@ -1,0 +1,118 @@
+from sage.all import matrix,VectorSpace,MatrixSpace,RIF
+from joblib import Parallel, delayed
+from sparse import *
+from sparse import matrix_norminf,interval_norminf_error
+from time_profile import *
+
+import numpy as np
+
+import ctypes
+
+import cython
+import numpy as np
+cimport numpy as np
+
+DTYPE = np.float64
+ctypedef np.float64_t DTYPE_t
+
+from sage.rings.real_mpfr import *
+#from sage.rings.real_mpfr cimport *
+
+
+FE_TONEAREST = 0x0000
+FE_DOWNWARD = 0x0400
+FE_UPWARD = 0x0800
+FE_TOWARDZERO = 0x0c00
+libc = ctypes.CDLL('libm.so.6')
+
+@timefunc
+def decay_for_iterate_better_infinity_double_cython(dynamic, basis, N , P, n_jobs = 1, output_rate=16, debug=False, interval_matrix=True):
+	
+	if interval_matrix is True:
+		PP=sage_sparse_to_scipy_sparse(P)
+	else:
+		PP=P
+	Rup = RealField(rnd='RNDU')
+	Rdown = RealField(rnd='RNDN')
+	
+	# we first bound from above the norm of the matrix P from above
+	if interval_matrix is True:
+		diameter = interval_norminf_error(P)
+	else:
+		diameter=10**(-13)
+	
+	print "diameter ", diameter
+	
+	norm_inf_precompose=basis.norm_precompose()
+	norm_inf_postcompose=basis.norm_postcompose()
+	
+	
+	# find gamma
+	if interval_matrix is True:
+		gamma = Rup(np.finfo(float).eps) * max_nonzeros_per_row(P);
+	else:
+		gamma = Rup(np.finfo(float).eps) * P.nnz
+	gamma = gamma / (Rdown(1)-gamma)
+	
+	norm_of_the_matrix=matrix_norminf(PP, rnd='RNDU')
+	print "Norm of the matrix ", norm_of_the_matrix
+	norm_of_the_matrix=norm_inf_postcompose*norm_of_the_matrix*norm_inf_precompose
+	print "Norm of the linear application, with precompose and postcompose ", norm_of_the_matrix
+	print "Norm of the matrix times gamma", norm_of_the_matrix*gamma
+	diameter=norm_inf_postcompose*diameter*norm_inf_precompose
+	print "diameter with precompose and postcompose ", diameter
+	
+	
+	# initializes the matrix storing the sum of |Pv|, for v in contracting pairs
+	cdef np.ndarray[DTYPE_t, ndim=2] Q = np.zeros([len(basis), N])
+	
+	cdef int count=0
+	cdef Py_ssize_t i
+	cdef Py_ssize_t j
+	
+	cdef np.ndarray[DTYPE_t, ndim=1] v
+	cdef DTYPE_t s
+	
+	cdef int old_rnd
+	
+	for v, s in basis.contracting_pairs():
+		count=count+1
+		for i in range(N):
+			v=basis.mat_vec(PP,v)
+			old_rnd=libc.fegetround()
+			libc.fesetround(FE_UPWARD)
+			Q[:,i]+=np.absolute(v)
+			libc.fesetround(old_rnd)
+		if (count%output_rate)==0: print count
+	
+	# we estimate now the infinity norm, componentwise
+	
+	old_rnd=libc.fegetround()
+	libc.fesetround(FE_UPWARD)
+	cdef np.ndarray[DTYPE_t, ndim=2] Norms=np.zeros([3,N+1])
+	# the norm matrix, the first column contains
+	# row 0, the infinity norm of the starting vectors
+	# row 1, the infinity norm of the numerical matrix
+	# row 2, the infinity norm of P
+	Norms[0,0]=1
+	Norms[1,0]=1
+	Norms[2,0]=1	
+	
+	Norms[0,1]=max(Q[:,0])
+	Norms[1,1]=Norms[0,1]+norm_of_the_matrix*gamma
+	Norms[2,1]=Norms[1,1]+diameter
+	
+	for i in range(2,N+1):
+		Norms[0,i]=max(Q[:,i-1])
+		add_num=Rup(0)
+		add_int=Rup(0)
+		for j in range(i):
+			add_num+=Norms[1,j]*norm_of_the_matrix*gamma*Norms[0,i-1-j]
+			add_int+=Norms[1,j]*diameter*Norms[2,i-1-j]
+		Norms[1,i]=Norms[0,i]+add_num
+		Norms[2,i]=Norms[1,i]+add_int
+	
+	libc.fesetround(old_rnd)
+	
+	return Q,Norms
+
